@@ -8,9 +8,9 @@ import acyclic.file
 import scala.reflect.ClassTag
 import language.postfixOps
 
-object StructTests extends TestSuite{
+object StructTests extends TestSuite {
   Seq(1).to[Vector]
-  val tests = TestSuite{
+  val tests = Tests {
     'arrays{
       'empty-rwk(Array[Int](), "[]")(_.toSeq)
       'Boolean-rwk(Array(true, false), "[true,false]")(_.toSeq)
@@ -159,7 +159,7 @@ object StructTests extends TestSuite{
     'jsValue{
       'value{
         val value:Js.Value = Js.Str("test")
-        rw(value, """"test"""")
+        rw(value, """ "test" """.trim)
       }
       'str-rw(Js.Str("test"), """"test"""")
       'num-rw(Js.Num(7), """7""")

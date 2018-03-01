@@ -4,17 +4,27 @@ import utest._
 import upickle.legacy.read
 import acyclic.file
 case class Fee(i: Int, s: String)
+object Fee{
+  implicit def rw: upickle.legacy.ReadWriter[Fee] = upickle.legacy.macroRW
+}
 sealed trait Fi
 object Fi{
+  implicit def rw: upickle.legacy.ReadWriter[Fi] = upickle.legacy.ReadWriter.merge(Fo.rw, Fum.rw)
   case class Fo(i: Int) extends Fi
+  object Fo{
+    implicit def rw: upickle.legacy.ReadWriter[Fo] = upickle.legacy.macroRW
+  }
   case class Fum(s: String) extends Fi
+  object Fum{
+    implicit def rw: upickle.legacy.ReadWriter[Fum] = upickle.legacy.macroRW
+  }
 }
 /**
 * Generally, every failure should be a Invalid.Json or a
 * InvalidData. If any assertion errors, match errors, number
 * format errors or similar leak through, we've failed
 */
-object FailureTests extends TestSuite{
+object FailureTests extends TestSuite {
 
   def tests = TestSuite {
     'jsonFailures {

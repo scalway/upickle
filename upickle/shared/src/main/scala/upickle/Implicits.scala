@@ -15,7 +15,7 @@ import java.util.UUID
 * Typeclasses to allow read/writing of all the common
 * data-types and data-structures in the standard library
 */
-trait Implicits extends Types with BigDecimalSupport { imp: Generated =>
+trait Implicits extends Types { imp: Generated =>
 
 
 
@@ -26,61 +26,22 @@ trait Implicits extends Types with BigDecimalSupport { imp: Generated =>
   implicit def Tuple2W[T1: W, T2: W]: W[(T1, T2)]
 
 
-  implicit class MergeRW[T: ClassTag](a: ReadWriter[T]){
-    def merge[V <: R: ClassTag, R >: T](b: ReadWriter[V]): ReadWriter[R] = {
-      ReadWriter[R](
-        {
-          case r: V => b.write(r)
-          case r: T => a.write(r)
-        },
-        b.read.orElse[Js.Value, R](a.read)
-      )
-    }
-  }
-  implicit class MergeR[T: ClassTag](a: Reader[T]){
-    def merge[V <: R: ClassTag, R >: T](b: Reader[V]): Reader[R] = {
-      Reader[R](b.read.orElse[Js.Value, R](a.read))
-    }
-  }
-
-  implicit class MergeW[T: ClassTag](a: Writer[T]){
-    def merge[V <: R: ClassTag, R >: T](b: Writer[V]): Writer[R] = {
-      Writer[R]{
-        case r: V => b.write(r)
-        case r: T => a.write(r)
-      }
-
-    }
-  }
-
   /**
    * APIs that need to be exposed to the outside world to support Macros
    * which depend on them, but probably should not get used directly.
    */
   object Internal {
-    type Reader[T] = Implicits.this.Reader[T]
-    type Writer[T] = Implicits.this.Writer[T]
-    def makeReader[T](pf: PartialFunction[Js.Value, T]) = imp.Reader(pf)
-    def makeWriter[T](f: T => Js.Value) = imp.Writer(f)
+
     // Have to manually spell out the implicit here otherwise compiler crashes
     def readJs[T](expr: Js.Value)(implicit ev: Reader[T]): T = imp.readJs(expr)(ev)
     def writeJs[T](expr: T)(implicit ev: Writer[T]): Js.Value = imp.writeJs(expr)(ev)
-
-    def merge0[T: ClassTag, R, U](f: T => R): U => R = {
-      case t: T => f(t)
-    }
-
-    def merge[T: ClassTag, R, V: ClassTag, U](f: T => R, g: V => R): U => R = {
-      case v: V => g(v)
-      case t: T => f(t)
-    }
-
 
 
     def validate[T](name: String)(pf: PartialFunction[Js.Value, T]) = new PartialFunction[Js.Value, T] {
       def isDefinedAt(x: Value) = pf.isDefinedAt(x)
 
       def apply(v1: Value): T = pf.applyOrElse(v1, (x: Js.Value) => throw Invalid.Data(x, name))
+
       override def toString = s"validate($name, $pf)"
     }
     def validateReader[T](name: String)(r: => Reader[T]): Reader[T] = new Reader[T]{
@@ -136,7 +97,7 @@ trait Implicits extends Types with BigDecimalSupport { imp: Generated =>
   )
   private[this] def numericReaderFunc[T: Numeric](func: Double => T, func2: String => T): JPF[T] = Internal.validate("Number or String"){
     case n @ Js.Num(x) => try{func(x) } catch {case e: NumberFormatException => throw Invalid.Data(n, "Number")}
-    case s @ Js.Str(x) => try{func2(x) } catch {case e: NumberFormatException => throw Invalid.Data(s, "Number")}
+    case s @ Js.Str(x) => try{func2(x.toString) } catch {case e: NumberFormatException => throw Invalid.Data(s, "Number")}
   }
 
   private[this] def NumericReadWriter[T: Numeric](func: Double => T, func2: String => T): RW[T] = RW[T](
@@ -170,7 +131,7 @@ trait Implicits extends Types with BigDecimalSupport { imp: Generated =>
   implicit val FloatRW = NumericReadWriter(_.toFloat, _.toFloat)
   implicit val DoubleRW = NumericReadWriter(_.toDouble, _.toDouble)
   implicit val BigIntRW = NumericStringReadWriter[BigInt](BigInt(_))
-  implicit val BigDecimalRW = NumericStringReadWriter[BigDecimal](exactBigDecimal)
+  implicit val BigDecimalRW = NumericStringReadWriter[BigDecimal](BigDecimal(_))
 
   import collection.generic.CanBuildFrom
   implicit def SeqishR[V[_], T]
@@ -257,7 +218,7 @@ trait Implicits extends Types with BigDecimalSupport { imp: Generated =>
     FiniteR.read orElse InfiniteR.read
   })
 
-  implicit def UuidR: R[UUID] = R[UUID]{case Js.Str(s) => UUID.fromString(s)}
+  implicit def UuidR: R[UUID] = R[UUID]{case Js.Str(s) => UUID.fromString(s.toString)}
   implicit def UuidW: W[UUID] = W[UUID]{case t: UUID => Js.Str(t.toString)}
 
   implicit def JsObjR: R[Js.Obj] = R[Js.Obj]{case v:Js.Obj => v}
@@ -280,6 +241,14 @@ trait Implicits extends Types with BigDecimalSupport { imp: Generated =>
 
   implicit def JsNullR: R[Js.Null.type] = R[Js.Null.type]{case v:Js.Null.type => v}
   implicit def JsNullW: W[Js.Null.type] = W[Js.Null.type]{case v:Js.Null.type => v}
+
+  implicit def JsValueR: R[Js.Value] = Reader.merge(
+    JsObjR, JsArrR, JsStrR, JsTrueR, JsFalseR, JsNullR, JsNumR
+  )
+
+  implicit def JsValueW: W[Js.Value] = Writer.merge(
+    JsObjW, JsArrW, JsStrW, JsTrueW, JsFalseW, JsNullW, JsNumW
+  )
 
 
   def makeReader[T](pf: PartialFunction[Js.Value, T]) = Reader.apply(pf)

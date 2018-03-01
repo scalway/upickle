@@ -2,38 +2,63 @@ package example
 import acyclic.file
 import upickle.{Js, TestUtil}
 import utest._
+import upickle.default.{ReadWriter => RW, macroRW}
 object Simple {
   case class Thing(myFieldA: Int, myFieldB: String)
+  object Thing{
+    implicit def rw: RW[Thing] = macroRW
+  }
   case class Big(i: Int, b: Boolean, str: String, c: Char, t: Thing)
+  object Big{
+    implicit def rw: RW[Big] = macroRW
+  }
 }
 object Sealed{
   sealed trait IntOrTuple
+  object IntOrTuple{
+    implicit def rw: RW[IntOrTuple] = RW.merge(IntThing.rw, TupleThing.rw)
+  }
   case class IntThing(i: Int) extends IntOrTuple
+  object IntThing{
+    implicit def rw: RW[IntThing] = macroRW
+  }
   case class TupleThing(name: String, t: (Int, Int)) extends IntOrTuple
+  object TupleThing{
+    implicit def rw: RW[TupleThing] = macroRW
+  }
 }
 object Recursive{
   case class Foo(i: Int)
+  object Foo{
+    implicit def rw: RW[Foo] = macroRW
+  }
   case class Bar(name: String, foos: Seq[Foo])
+  object Bar{
+    implicit def rw: RW[Bar] = macroRW
+  }
 }
 object Defaults{
   case class FooDefault(i: Int = 10, s: String = "lol")
+  object FooDefault{
+    implicit def rw: RW[FooDefault] = macroRW
+  }
 }
 object Keyed{
-  import derive.key
-  case class KeyBar(@key("hehehe") kekeke: Int)
+  case class KeyBar(@upickle.key("hehehe") kekeke: Int)
+  object KeyBar{
+    implicit def rw: RW[KeyBar] = macroRW
+  }
 }
 object KeyedTag{
-  import derive.key
   sealed trait A
-  @key("Bee") case class B(i: Int) extends A
-  case object C extends A
-}
-object Custom{
-  class CustomThing(val i: Int, val s: String)
-  object CustomThing{
-    def apply(i: Int) = new CustomThing(i + 10, "s" * (i + 10))
-    def unapply(t: CustomThing) = Some(t.i - 10)
+  object A{
+    implicit def rw: RW[A] = RW.merge(B.rw, macroRW[C.type])
   }
+  @upickle.key("Bee") case class B(i: Int) extends A
+  object B{
+    implicit def rw: RW[B] = macroRW
+  }
+  case object C extends A
 }
 object Custom2{
   import upickle.Js
@@ -44,7 +69,7 @@ object Custom2{
     }
     implicit val thing2Reader = upickle.default.Reader[CustomThing2]{
       case Js.Str(str) =>
-        val Array(i, s) = str.split(" ")
+        val Array(i, s) = str.toString.split(" ")
         new CustomThing2(i.toInt, s)
     }
   }
@@ -57,10 +82,10 @@ import Simple._
 import Recursive._
 import Defaults._
 
-object ExampleTests extends TestSuite{
+object ExampleTests extends TestSuite {
 
   import TestUtil._
-  val tests = TestSuite{
+  val tests = Tests {
     'simple{
       import upickle.default._
 
@@ -222,6 +247,7 @@ object ExampleTests extends TestSuite{
         upickle.default.write(Thing(1, "gg")) ==> """{"myFieldA":1,"myFieldB":"gg"}"""
         upickle.default.read[Thing]("""{"myFieldA":1,"myFieldB":"gg"}""") ==> Thing(1, "gg")
 
+        implicit def thingRW: SnakePickle.ReadWriter[Thing] = SnakePickle.macroRW
         // snake_case_keys read-writing
         SnakePickle.write(Thing(1, "gg")) ==> """{"my_field_a":1,"my_field_b":"gg"}"""
         SnakePickle.read[Thing]("""{"my_field_a":1,"my_field_b":"gg"}""") ==> Thing(1, "gg")
